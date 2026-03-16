@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VMix Title Controller</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--bg2:#161b26;--bg3:#1c2232;--bg4:#222840;
+  --border:#252d42;--border2:#2e3a56;
+  --text:#e2e6f3;--text2:#8892b0;--text3:#4a5278;
+  --purple:#7c6af5;--purple2:#9d8ff7;--purple-bg:#1e1a3f;--purple-dim:#2d2860;
+  --teal:#1fb88a;--teal-bg:#0a2e22;--teal-dim:#103d2e;
+  --red:#e85252;--red-bg:#2a1010;--red-dim:#3d1515;
+  --amber:#f0a500;--amber-bg:#2a1e00;--amber-dim:#3a2900;
+  --blue:#3b8bd4;--blue-bg:#0d1e30;--blue-dim:#122340;
+  --green:#2ec97e;
+  --radius:10px;--radius-sm:6px;
+  --shadow:0 2px 12px rgba(0,0,0,0.4);
+}
+
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Header ── */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;gap:12px;height:48px;flex-shrink:0}
+.logo{font-size:15px;font-weight:700;color:var(--purple);letter-spacing:-.3px}
+.logo span{color:var(--text3);font-weight:400;font-size:13px}
+.header-status{display:flex;align-items:center;gap:10px;margin-left:auto}
+.status-pill{display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;border:1px solid}
+.status-pill.vmix-ok{background:var(--teal-bg);border-color:#0f5e3e;color:var(--teal)}
+.status-pill.vmix-err{background:var(--red-bg);border-color:#5c1f1f;color:var(--red)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.ws-pill{display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:600;border:1px solid;background:var(--red-bg);border-color:#5c1f1f;color:var(--red);transition:all .3s}
+.ws-pill.ok{background:var(--teal-bg);border-color:#0f5e3e;color:var(--teal)}
+
+/* ── Nav tabs ── */
+nav{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;padding:0 16px;flex-shrink:0}
+.nav-tab{padding:10px 16px;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;transition:all .15s;user-select:none}
+.nav-tab:hover{color:var(--text2)}
+.nav-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+
+/* ── Layout ── */
+.app-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane{display:none;flex:1;overflow:hidden;min-height:0;height:0}.pane.scrollable{overflow-y:scroll;overflow-x:auto}
+.pane.active{display:flex}
+
+/* ── Operator pane ── */
+#pane-operator{flex-direction:row}
+.col-left{width:380px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden}
+.col-mid{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.col-right{width:260px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+
+/* ── Sections ── */
+.section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+
+/* ── Preview / Live slots ── */
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.slot{border-radius:var(--radius-sm);padding:10px 12px;border:1px solid var(--border);background:var(--bg3);min-height:72px;position:relative;transition:border-color .2s}
+.slot-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.slot.preview-slot .slot-label{color:var(--blue)}
+.slot.live-slot .slot-label{color:var(--teal)}
+.slot.live-slot.has-content{border-color:var(--teal);background:var(--teal-dim)}
+.slot.preview-slot.has-content{border-color:var(--blue);background:var(--blue-dim)}
+.slot-indicator{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.slot-name{font-size:14px;font-weight:700;color:var(--text);line-height:1.2}
+.slot-name.empty{font-size:12px;font-weight:400;color:var(--text3);font-style:italic}
+.slot-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.slot-org{font-size:10px;color:var(--text3);margin-top:1px}
+
+/* ── Action buttons ── */
+.action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.action-row.three{grid-template-columns:1fr 1fr 1fr}
+.btn{border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-weight:700;padding:0 12px;height:38px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;letter-spacing:.2px;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-take{background:var(--teal);color:#fff}
+.btn-take:hover:not(:disabled){background:#25d49e}
+.btn-preview{background:var(--blue-dim);color:var(--blue);border:1px solid #1e4a7a}
+.btn-preview:hover:not(:disabled){background:#1a3d6a}
+.btn-clear{background:var(--red-dim);color:var(--red);border:1px solid #5c2020}
+.btn-clear:hover:not(:disabled){background:#5a2020}
+.btn-vmix-in{background:var(--purple-dim);color:var(--purple2);border:1px solid var(--purple-dim)}
+.btn-vmix-in:hover:not(:disabled){background:#3a3280}
+.btn-vmix-out{background:var(--bg4);color:var(--text2);border:1px solid var(--border2)}
+.btn-vmix-out:hover:not(:disabled){background:var(--border2)}
+.btn-neutral{background:var(--bg4);color:var(--text2);border:1px solid var(--border2)}
+.btn-neutral:hover:not(:disabled){background:var(--border2)}
+.btn-amber{background:var(--amber-dim);color:var(--amber);border:1px solid #6a4400}
+.btn-amber:hover:not(:disabled){background:#4a3000}
+.btn-full{grid-column:1/-1}
+
+/* ── Search ── */
+.search-wrap{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.search-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 12px 8px 34px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%234a5278' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='4'/%3E%3Cline x1='10' y1='10' x2='13' y2='13'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:10px center}
+.search-input:focus{border-color:var(--purple)}
+.search-input::placeholder{color:var(--text3)}
+
+/* ── ID entry ── */
+.id-entry{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.id-row{display:flex;gap:8px;align-items:stretch}
+.id-combo{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:0 14px;font-size:18px;font-weight:700;color:var(--text);outline:none;height:48px;transition:border-color .15s;-moz-appearance:textfield}
+.id-combo::-webkit-inner-spin-button,.id-combo::-webkit-outer-spin-button{-webkit-appearance:none}
+.id-combo:focus{border-color:var(--purple)}
+.id-combo::placeholder{font-size:13px;font-weight:400;color:var(--text3)}
+.id-preview-name{font-size:13px;font-weight:700;color:var(--text)}
+.id-preview-sub{font-size:11px;color:var(--text2)}
+.id-preview-hint{font-size:11px;color:var(--text3);font-style:italic}
+
+/* ── Names grid ── */
+.names-scroll{flex:1;overflow-y:auto;padding:8px;min-height:0;height:0}
+.names-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:5px}
+.name-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;cursor:pointer;transition:all .12s;user-select:none}
+.name-card:hover{border-color:var(--purple-dim);background:var(--bg4)}
+.name-card.is-live{border-color:var(--teal);background:var(--teal-dim)}
+.name-card.is-preview{border-color:var(--blue);background:var(--blue-dim)}
+.nc-id{font-size:10px;font-weight:700;color:var(--purple);margin-bottom:2px}
+.nc-name{font-size:12px;font-weight:600;color:var(--text);line-height:1.3}
+.nc-title{font-size:10px;color:var(--text2)}
+
+/* ── Main centre column ── */
+.on-air-banner{padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.air-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.air-name{font-size:28px;font-weight:800;color:var(--text);line-height:1.1}
+.air-name.blank{color:var(--text3);font-size:18px;font-weight:400;font-style:italic}
+.air-title{font-size:14px;color:var(--purple2);margin-top:3px}
+.air-org{font-size:12px;color:var(--text2);margin-top:2px}
+.air-meta{font-size:11px;color:var(--text3);margin-top:8px}
+
+/* ── VMix controls in centre ── */
+.vmix-panel{padding:12px 16px;border-bottom:1px solid var(--border)}
+
+/* ── Flash animations ── */
+@keyframes flashG{0%,100%{background:var(--bg2)}50%{background:#0a2e22}}
+@keyframes flashR{0%,100%{background:var(--bg2)}50%{background:var(--red-bg)}}
+@keyframes flashB{0%,100%{background:var(--bg2)}50%{background:var(--blue-bg)}}
+.flash-green{animation:flashG .5s ease}
+.flash-red{animation:flashR .5s ease}
+.flash-blue{animation:flashB .5s ease}
+
+/* ── Companion ── */
+.companion-box{margin:12px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg3);padding:12px;text-align:center}
+.companion-btn{width:56px;height:56px;border-radius:10px;margin:0 auto 8px;transition:all .25s;background:var(--red-dim);border:2px solid var(--red-bg);box-shadow:0 0 16px rgba(232,82,82,.15)}
+.companion-btn.live{background:var(--teal-dim);border-color:var(--teal);box-shadow:0 0 20px rgba(31,184,138,.3)}
+@keyframes cFlash{0%,100%{background:var(--purple-dim)}50%{background:var(--purple);box-shadow:0 0 28px rgba(124,106,245,.6)}}
+.companion-btn.flash{animation:cFlash .4s ease 2}
+.companion-label{font-size:11px;color:var(--text2)}
+
+/* ── History ── */
+.history-item{padding:8px 10px;border-radius:var(--radius-sm);border-left:3px solid var(--border);background:var(--bg3);margin-bottom:5px}
+.history-item.live-item{border-left-color:var(--teal)}
+.history-item.clear-item{border-left-color:var(--red)}
+.h-event{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;float:right}
+.h-event.live{color:var(--teal)}
+.h-event.cleared{color:var(--red)}
+.h-name{font-size:12px;font-weight:600;color:var(--text)}
+.h-sub{font-size:10px;color:var(--text2)}
+.h-time{font-size:10px;color:var(--text3)}
+
+/* ── Settings pane ── */
+#pane-settings{flex-direction:column;align-items:stretch}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;width:100%}
+.settings-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.settings-card h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600}
+.field input,.field select{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--purple)}
+.field select option{background:var(--bg3)}
+.field-hint{font-size:10px;color:var(--text3);margin-top:3px}
+.save-btn{background:var(--purple);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s}
+.save-btn:hover{background:var(--purple2)}
+
+/* ── Log pane ── */
+#pane-log{flex-direction:column;padding:20px}
+.log-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.log-files{display:flex;flex-direction:column;gap:8px;max-width:700px}
+.log-file-row{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.log-file-name{font-family:monospace;font-size:12px;color:var(--text2);flex:1}
+.log-dl-btn{background:var(--purple-dim);color:var(--purple2);border:1px solid #3a3280;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;transition:background .15s}
+.log-dl-btn:hover{background:#3a3280}
+
+/* ── StreamDeck pane ── */
+#pane-sd{flex-direction:column;padding:20px}
+.sd-buttons{display:grid;grid-template-columns:repeat(3,120px);gap:12px;margin-bottom:20px}
+.sd-key{height:100px;border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;border:1px solid;font-size:13px;font-weight:700;transition:all .15s;user-select:none}
+.sd-key:active{transform:scale(.94)}
+.sd-key.sd-next{background:var(--teal-dim);border-color:var(--teal);color:var(--teal)}
+.sd-key.sd-prev{background:var(--amber-dim);border-color:var(--amber);color:var(--amber)}
+.sd-key.sd-clear{background:var(--red-dim);border-color:var(--red);color:var(--red)}
+.sd-key .sd-icon{font-size:24px}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  #pane-operator{flex-direction:column;height:auto;overflow-y:auto}
+  .col-left,.col-right{width:100%;border-right:none;border-left:none;border-bottom:1px solid var(--border)}
+  .col-right{border-top:1px solid var(--border)}
+  .col-mid{min-height:200px}
+  .slots{grid-template-columns:1fr 1fr}
+  .action-row.three{grid-template-columns:1fr 1fr}
+  .action-row.three .btn:last-child{grid-column:1/-1}
+  body{height:auto;min-height:100vh;overflow-y:auto}
+  .app-body{flex:1;overflow:visible;height:auto}
+  .pane{height:auto !important;overflow:visible !important;flex:none}
+  .col-left,.col-mid,.col-right{overflow:visible;height:auto}
+  .names-scroll{max-height:260px;overflow-y:auto}
+}
+@media(max-width:600px){
+  .slots{grid-template-columns:1fr}
+  .names-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+  .settings-grid{grid-template-columns:1fr}
+  .sd-buttons{grid-template-columns:repeat(3,1fr)}
+  nav{overflow-x:auto}
+  .nav-tab{white-space:nowrap;font-size:11px;padding:10px 12px}
+  .state-bar{flex-wrap:wrap;gap:6px}
+  #pane-settings > div{min-width:unset !important}
+  #pane-settings > div > div:first-child{grid-template-columns:1fr !important}
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+/* ── Overlay state indicators ── */
+.state-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;font-size:11px;font-weight:700}
+.state-chip{display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:100px;border:1px solid;transition:all .3s}
+.state-chip.data-loaded{background:var(--amber-dim);border-color:var(--amber);color:var(--amber)}
+.state-chip.overlay-live{background:var(--teal-dim);border-color:var(--teal);color:var(--teal)}
+.state-chip.blank{background:var(--bg3);border-color:var(--border);color:var(--text3)}
+.state-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.state-chip.overlay-live .state-dot{animation:pulse 1.5s ease-in-out infinite}
+/* ── Toast ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--teal);color:#fff;font-size:13px;font-weight:700;padding:10px 22px;border-radius:100px;pointer-events:none;opacity:0;transition:all .3s;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:var(--red)}
+/* ── Operator name bar ── */
+.operator-bar{padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.operator-input{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:5px 10px;font-size:12px;color:var(--text);outline:none;width:160px;transition:border-color .15s}
+.operator-input:focus{border-color:var(--purple)}
+.operator-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">VMix Titles <span>v2</span></div>
+  <div class="header-status">
+    <div class="status-pill vmix-err" id="vmix-status-pill">
+      <div class="status-dot"></div>
+      <span id="vmix-status-text">VMix offline</span>
+    </div>
+    <div class="ws-pill" id="ws-pill">
+      <div class="status-dot"></div>
+      <span id="ws-text">Server</span>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <div class="nav-tab active" data-tab="operator" onclick="switchTab('operator')">Operator</div>
+  <div class="nav-tab" data-tab="sd" onclick="switchTab('sd')">StreamDeck</div>
+  <div class="nav-tab" data-tab="settings" onclick="switchTab('settings')">Setup</div>
+  <div class="nav-tab" data-tab="log" onclick="switchTab('log')">Session Log</div>
+</nav>
+
+<div class="app-body">
+
+  <!-- ── OPERATOR PANE ── -->
+  <div class="pane active" id="pane-operator">
+
+    <!-- Left: search + name grid -->
+    <div class="col-left">
+
+      <div class="operator-bar">
+        <span class="operator-badge">Operator</span>
+        <div style="position:relative;flex:1;max-width:200px">
+          <input class="operator-input" type="text" id="operator-name" placeholder="Your name…" oninput="onOperatorNameInput(this.value)" autocomplete="off" style="width:100%">
+          <div id="op-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:0 0 6px 6px;z-index:100;max-height:160px;overflow-y:auto"></div>
+        </div>
+        <button onclick="saveOperatorName()" style="background:var(--purple-dim);color:var(--purple2);border:1px solid #3a3280;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ Save</button>
+        <span id="operator-saved" style="font-size:10px;color:var(--teal);opacity:0;transition:opacity .3s">✓</span>
+      </div>
+
+      <div class="search-wrap">
+        <input class="search-input" type="text" placeholder="Search by name, title, ID…" id="search-input" oninput="filterNames(this.value)">
+      </div>
+
+      <div class="id-entry">
+        <div class="section-title">Quick ID entry</div>
+        <input class="id-combo" type="number" id="id-input" placeholder="## Type an ID…" min="1" oninput="onIdInput(this.value)" onkeydown="onIdKey(event)">
+        <div id="id-preview" style="min-height:22px;padding:4px 2px;font-size:12px">
+          <div class="id-preview-hint"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button class="btn btn-preview" style="flex:1" id="btn-to-preview" onclick="sendToPreview()" disabled>To preview</button>
+          <button class="btn btn-take" style="flex:1" id="btn-take-live" onclick="takeFromInput()" disabled>Take live</button>
+        </div>
+      </div>
+
+      <div class="names-scroll">
+        <div class="names-grid" id="names-grid"></div>
+      </div>
+
+    </div>
+
+    <!-- Centre: on-air + VMix controls -->
+    <div class="col-mid">
+
+      <div class="state-bar">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Status:</span>
+        <div class="state-chip blank" id="state-data">
+          <div class="state-dot"></div>
+          <span id="state-data-text">No data</span>
+        </div>
+        <span style="color:var(--border2);font-size:14px">→</span>
+        <div class="state-chip blank" id="state-overlay">
+          <div class="state-dot"></div>
+          <span id="state-overlay-text">Overlay off</span>
+        </div>
+        <span style="font-size:10px;color:var(--text3);margin-left:2px;cursor:help" title="Overlay status polls VMix every 2s. Manual changes in VMix may take up to 2s to reflect here.">ⓘ</span>
+      </div>
+
+      <div class="slots">
+        <div class="slot preview-slot" id="slot-preview">
+          <div class="slot-label"><div class="slot-indicator"></div>Preview</div>
+          <div class="slot-name empty" id="prev-name">Empty</div>
+          <div class="slot-sub" id="prev-sub" style="display:none"></div>
+          <div class="slot-org" id="prev-org" style="display:none"></div>
+        </div>
+        <div class="slot live-slot" id="slot-live">
+          <div class="slot-label"><div class="slot-indicator"></div>Live</div>
+          <div class="slot-name empty" id="live-name">Blank</div>
+          <div class="slot-sub" id="live-sub" style="display:none"></div>
+          <div class="slot-org" id="live-org" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Two preview→live buttons -->
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:2px">From preview</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-preview" style="flex:1" id="btn-send-data-only" onclick="takePreviewDataOnly()" disabled title="Sends name/title to the graphic but does NOT trigger VMix — lets the VMix operator decide when to take it live">
+            ⬆ Send data only
+          </button>
+          <button class="btn btn-take" style="flex:1" id="btn-take-preview" onclick="takePreviewLive()" disabled title="Sends data AND triggers VMix overlay after delay">
+            ▶ Send + go live
+          </button>
+        </div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5">
+          <span style="color:var(--blue)">Send data only</span> — loads text, VMix operator controls graphic &nbsp;|&nbsp;
+          <span style="color:var(--teal)">Send + go live</span> — takes preview live automatically
+        </div>
+      </div>
+
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-clear" style="flex:1" onclick="clearLive()">✕ Clear data + hide</button>
+        <button class="btn btn-vmix-out" style="flex:1" id="btn-vmix-out-only" onclick="vmixOutOnly()" title="Hides the graphic in VMix without clearing the data">◻ Hide graphic only</button>
+      </div>
+
+      <div class="vmix-panel" id="vmix-control-panel">
+        <div class="section-title" style="display:flex;align-items:center;gap:8px">
+          VMix graphic control
+          <span id="vmix-disabled-badge" style="display:none;font-size:9px;background:var(--amber-dim);color:var(--amber);border:1px solid #6a4400;padding:1px 7px;border-radius:100px;font-weight:700">DISABLED IN SETTINGS</span>
+        </div>
+        <div class="action-row three" style="padding:0;margin-bottom:0">
+          <button class="btn btn-vmix-in vmix-ctrl" onclick="vmixIn()">◼ Overlay in</button>
+          <button class="btn btn-vmix-out vmix-ctrl" onclick="vmixOut()">◻ Overlay out</button>
+          <button class="btn btn-take vmix-ctrl btn-full" onclick="vmixDataAndIn()" id="btn-data-take">⬆ Re-send + go live</button>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+          Data → <span id="vmix-delay-display">500</span>ms delay → graphic live
+        </div>
+      </div>
+
+      <div class="on-air-banner" id="air-banner">
+        <div class="air-label">
+          On air
+          <span id="air-badge" style="background:var(--red-bg);color:var(--red);border:1px solid #5c1f1f;padding:1px 8px;border-radius:100px;font-size:10px;font-weight:700">BLANK</span>
+        </div>
+        <div class="air-name blank" id="air-name">No title active</div>
+        <div class="air-title" id="air-title" style="display:none"></div>
+        <div class="air-org" id="air-org" style="display:none"></div>
+        <div class="air-meta" id="air-meta"></div>
+      </div>
+
+    </div>
+
+    <!-- Right: companion + history -->
+    <div class="col-right">
+
+      <div class="section">
+        <div class="section-title">Companion</div>
+        <div class="companion-box">
+          <div class="companion-btn" id="companion-dot"></div>
+          <div class="companion-label" id="companion-label">Blank</div>
+        </div>
+      </div>
+
+      <div class="section" style="flex:1;overflow-y:auto">
+        <div class="section-title">
+          Session history
+          <span style="margin-left:auto;font-size:10px;color:var(--text3)" id="log-count">0 entries</span>
+        </div>
+        <div id="history-list">
+          <div style="font-size:12px;color:var(--text3)">Nothing yet</div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button onclick="newSession()" class="btn btn-neutral" style="width:100%;height:32px;font-size:11px">↺ New session</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── STREAMDECK PANE ── -->
+  <div class="pane scrollable" id="pane-sd">
+    <div style="padding:20px">
+      <div style="margin-bottom:20px">
+        <div class="section-title" style="font-size:13px;margin-bottom:12px;color:var(--text2)">On-screen controls (mirrors StreamDeck)</div>
+        <div class="sd-buttons">
+          <div class="sd-key sd-prev" onclick="sendCmd('/prev')">
+            <div class="sd-icon">←</div>
+            Previous
+          </div>
+          <div class="sd-key sd-next" onclick="sendCmd('/next')">
+            <div class="sd-icon">→</div>
+            Next
+          </div>
+          <div class="sd-key sd-clear" onclick="clearLive()">
+            <div class="sd-icon">✕</div>
+            Clear
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card" style="max-width:500px">
+        <h3>StreamDeck HTTP endpoints</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 12px">
+            <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Next</div>
+            <div style="font-family:monospace;color:var(--purple)" id="sd-url-next"></div>
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 12px">
+            <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Previous</div>
+            <div style="font-family:monospace;color:var(--purple)" id="sd-url-prev"></div>
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:8px 12px">
+            <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Clear</div>
+            <div style="font-family:monospace;color:var(--purple)" id="sd-url-clear"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:var(--text3)">Use POST method. No body required. Plugin: "HTTP Request" in StreamDeck software.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS PANE ── -->
+  <div class="pane scrollable" id="pane-settings">
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;width:100%;min-width:1100px;box-sizing:border-box">
+
+      <!-- Row 1: top cards -->
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(200px,1fr));gap:16px">
+
+        <div class="settings-card" style="border-color:var(--purple-dim)">
+          <h3 style="color:var(--purple2)">VMix control</h3>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg3);border-radius:var(--radius-sm);border:1px solid var(--border2)">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text)">Enable VMix API control</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">When off, all graphic trigger buttons are hidden.</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;margin-left:16px;cursor:pointer">
+              <input type="checkbox" id="cfg-vmix-enabled" onchange="saveConfig()" style="opacity:0;width:0;height:0;position:absolute">
+              <span id="toggle-track" style="position:absolute;inset:0;border-radius:12px;background:var(--border2);transition:background .2s"></span>
+              <span id="toggle-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;pointer-events:none"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>VMix connection</h3>
+          <div class="field">
+            <label>VMix IP address</label>
+            <input type="text" id="cfg-host" placeholder="127.0.0.1">
+            <div class="field-hint">Use 127.0.0.1 if VMix is on the same PC</div>
+          </div>
+          <div class="field">
+            <label>VMix API port</label>
+            <input type="number" id="cfg-port" placeholder="8088">
+            <div class="field-hint">Default VMix API port is 8088</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="save-btn" onclick="saveConfig()">Save</button>
+            <button class="btn btn-neutral" style="height:34px;font-size:11px" onclick="testVmix()">Test connection</button>
+            <span id="vmix-test-result" style="font-size:11px;color:var(--text3)"></span>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>Graphic / input settings</h3>
+          <div class="field">
+            <label>VMix input name (lower-thirds GT)</label>
+            <input type="text" id="cfg-input" placeholder="Lower Third">
+            <div class="field-hint">Must exactly match the input name in VMix</div>
+          </div>
+          <div class="field">
+            <label>Overlay channel</label>
+            <select id="cfg-overlay">
+              <option value="1">Overlay 1</option>
+              <option value="2">Overlay 2</option>
+              <option value="3">Overlay 3</option>
+              <option value="4">Overlay 4</option>
+            </select>
+            <div class="field-hint">Which overlay channel your lower-third uses</div>
+          </div>
+          <button class="save-btn" onclick="saveConfig()">Save</button>
+        </div>
+
+        <div class="settings-card">
+          <h3>Timing</h3>
+          <div class="field">
+            <label>Data → graphic delay (ms)</label>
+            <input type="number" id="cfg-delay" placeholder="500" min="100" max="5000" step="100">
+            <div class="field-hint">500ms is safe. Increase if text flickers on first frame.</div>
+          </div>
+          <button class="save-btn" onclick="saveConfig()">Save</button>
+        </div>
+
+        <div class="settings-card">
+          <h3>VMix data source URLs</h3>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+            <div style="background:var(--bg3);border-radius:6px;padding:7px 10px">
+              <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Name</div>
+              <div style="font-family:monospace;color:var(--purple);font-size:11px" id="cfg-url-name"></div>
+            </div>
+            <div style="background:var(--bg3);border-radius:6px;padding:7px 10px">
+              <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Title / role</div>
+              <div style="font-family:monospace;color:var(--purple);font-size:11px" id="cfg-url-title"></div>
+            </div>
+            <div style="background:var(--bg3);border-radius:6px;padding:7px 10px">
+              <div style="color:var(--text3);font-size:10px;margin-bottom:2px">Organisation</div>
+              <div style="font-family:monospace;color:var(--purple);font-size:11px" id="cfg-url-org"></div>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text3)">Settings → Data Sources → Add → Text → paste URL → 500ms</div>
+        </div>
+
+      </div>
+
+      <!-- Row 2: Mix routing — full width -->
+      <div class="settings-card">
+        <h3>Mix routing — where the graphic appears</h3>
+        <div style="display:grid;grid-template-columns:1fr 280px;gap:20px">
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">Select mixes (Master + up to 16)</div>
+            <div id="mix-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:5px;width:100%"></div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-neutral" style="height:30px;font-size:11px" onclick="selectAllMixes()">Select all</button>
+              <button class="btn btn-neutral" style="height:30px;font-size:11px" onclick="clearAllMixes()">Clear all</button>
+              <button class="save-btn" style="height:30px;padding:0 14px;font-size:11px" onclick="saveMixConfig()">Save routing</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">Mix presets</div>
+            <div id="preset-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;min-height:24px">
+              <div style="font-size:11px;color:var(--text3)">No presets saved yet</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <input type="text" id="preset-name-input" placeholder="Preset name…" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;color:var(--text);outline:none">
+              <button class="save-btn" style="height:32px;padding:0 12px;font-size:11px;white-space:nowrap" onclick="savePreset()">Save preset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Keyboard shortcuts — full width -->
+      <div class="settings-card">
+        <h3 style="display:flex;align-items:center;gap:10px">
+          Keyboard shortcuts
+          <label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;margin-left:4px" title="Enable/disable all shortcuts">
+            <input type="checkbox" id="cfg-shortcuts-enabled" onchange="toggleShortcutsEnabled(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
+            <span id="sc-toggle-track" style="position:absolute;inset:0;border-radius:10px;background:var(--teal);transition:background .2s"></span>
+            <span id="sc-toggle-thumb" style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;pointer-events:none;transform:translateX(16px)"></span>
+          </label>
+          <span id="sc-enabled-label" style="font-size:10px;color:var(--teal);font-weight:400;text-transform:none;letter-spacing:0">Enabled</span>
+        </h3>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
+          Click any key badge then press a key to assign. Press <kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;font-size:10px">Esc</kbd> to clear. Active when not typing in a text field.
+        </div>
+
+        <!-- Profiles row -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+          <div style="font-size:11px;font-weight:700;color:var(--text2)">Profiles:</div>
+          <div id="sc-preset-list" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">
+            <input type="text" id="sc-preset-name" placeholder="Profile name…" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:5px 10px;font-size:12px;color:var(--text);outline:none;width:140px">
+            <button class="save-btn" style="height:32px;padding:0 12px;font-size:11px" onclick="saveShortcutPreset()">Save profile</button>
+          </div>
+        </div>
+
+        <!-- Defaults reference -->
+        <details style="margin-bottom:12px">
+          <summary style="font-size:11px;font-weight:700;color:var(--text3);cursor:pointer;user-select:none;padding:4px 0">▸ Show defaults reference</summary>
+          <div style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px">
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Send data only</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">D</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Send + go live</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">G</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Clear + hide</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">C</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Next name</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">→</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Previous name</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">←</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Overlay in</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">I</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Overlay out</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">O</kbd></div>
+            <div style="background:var(--bg3);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--text2)">Take preview live</span><kbd style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;color:var(--purple2);font-family:monospace">↵ Enter</kbd></div>
+          </div>
+        </details>
+
+        <div id="shortcut-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;width:100%"></div>
+
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="save-btn" onclick="saveShortcuts()">Save shortcuts</button>
+          <button class="btn btn-neutral" style="height:34px;font-size:11px" onclick="resetShortcuts()">Reset to defaults</button>
+        </div>
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:6px">Active shortcuts</div>
+          <div id="shortcut-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px;width:100%"></div>
+        </div>
+      </div>
+
+      <!-- Row 4: Scene presets + export -->
+      <div class="settings-card">
+        <h3>Scene presets &amp; config export</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">Save current scene</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <input type="text" id="scene-name-input" placeholder="Scene name (e.g. Sunday Service)…" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--text);outline:none">
+              <button class="save-btn" onclick="saveScene()">Save</button>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:8px">Saves all settings — VMix connection, routing, shortcuts — into one named preset.</div>
+            <div id="scene-list" style="display:flex;flex-direction:column;gap:5px"></div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">Export / import config file</div>
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <button class="save-btn" onclick="exportConfig()">⬇ Export config</button>
+              <label class="save-btn" style="cursor:pointer;display:flex;align-items:center;gap:6px">
+                ⬆ Import config
+                <input type="file" accept=".json" onchange="importConfig(event)" style="display:none">
+              </label>
+            </div>
+            <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-bottom:12px">
+              Export downloads a <span style="font-family:monospace;color:var(--purple2)">vmix-config.json</span> with all settings + scenes.<br>
+              Import applies it instantly — useful for moving between PCs or venues.
+            </div>
+            <div id="import-result" style="margin-top:8px;font-size:11px"></div>
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600">Reset everything</div>
+              <button onclick="resetToDefaults()" style="background:var(--red-dim);color:var(--red);border:1px solid #5c2020;border-radius:var(--radius-sm);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.background='#5a2020'" onmouseout="this.style.background='var(--red-dim)'">
+                ↺ Reset to factory defaults
+              </button>
+              <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.5">
+                Clears all settings, mix routing, shortcuts and scenes. VMix connection is reset to 127.0.0.1:8088. This cannot be undone — export first if you want a backup.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── LOG PANE ── -->
+    <!-- ── LOG PANE ── -->
+  <div class="pane scrollable" id="pane-log">
+    <div class="log-header">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">Session log</div>
+        <div style="font-size:12px;color:var(--text3)" id="log-session-info">Session started —</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+        <button class="btn btn-take" onclick="exportLog()" id="btn-export">Export to Excel</button>
+        <button class="btn btn-neutral" onclick="newSession()">New session</button>
+        <button class="btn btn-neutral" onclick="loadLogFiles()">Refresh files</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1100px">
+      <div>
+        <div class="section-title" style="margin-bottom:10px">Current session (<span id="live-log-count">0</span> entries)</div>
+        <div id="live-log-table" style="font-size:12px;color:var(--text3)">Nothing logged yet</div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:10px">Saved log files</div>
+        <div id="log-files-list"><div style="font-size:12px;color:var(--text3)">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = window.location.origin;
+let ws = null, reconnTimer = null;
+let namesDb = [], filtered = [];
+let liveState = { isBlank: true };
+let previewState = { isBlank: true };
+let inputPreview = null;
+let cfg = {};
+let sessionLog = [];
+let historyItems = [];
+let operatorName = localStorage.getItem('operatorName') || '';
+let overlayLive = false;  // true = graphic visible in VMix output
+
+// ── Toast notifications ──────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  if (toastTimer) clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className = type === 'error' ? 'error' : '';
+  void t.offsetWidth;
+  t.classList.add('show');
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── Operator name ─────────────────────────────────────────────────────────────
+let savedOperators = [];
+
+async function initOperatorName() {
+  // Load saved operators from server
+  try {
+    const res = await fetch('/operators');
+    savedOperators = await res.json();
+  } catch(e) { savedOperators = []; }
+  // Restore last used from localStorage
+  const last = localStorage.getItem('operatorName') || '';
+  const el = document.getElementById('operator-name');
+  if (el && last) { el.value = last; operatorName = last; }
+}
+
+function onOperatorNameInput(val) {
+  operatorName = val.trim();
+  localStorage.setItem('operatorName', operatorName);
+  // Show dropdown with matching saved names
+  const dropdown = document.getElementById('op-dropdown');
+  if (!dropdown) return;
+  const matches = savedOperators.filter(n => n.toLowerCase().includes(val.toLowerCase()) && n !== val);
+  if (val && matches.length) {
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = matches.map(n => `
+      <div onclick="selectOperator('${n.replace(/'/g,"\'")}') "
+        style="padding:7px 12px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+        <span>${n}</span>
+        <span onclick="event.stopPropagation();deleteOperator('${n.replace(/'/g,"\'")}') " style="color:var(--text3);font-size:10px;padding:1px 5px;hover:color:var(--red)">✕</span>
+      </div>`).join('');
+  } else {
+    dropdown.style.display = 'none';
+  }
+}
+
+function selectOperator(name) {
+  operatorName = name;
+  localStorage.setItem('operatorName', name);
+  const el = document.getElementById('operator-name');
+  if (el) el.value = name;
+  const dropdown = document.getElementById('op-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+async function saveOperatorName() {
+  const val = document.getElementById('operator-name')?.value.trim();
+  if (!val) { showToast('Enter a name first', 'error'); return; }
+  operatorName = val;
+  localStorage.setItem('operatorName', val);
+  const res = await fetch('/operators', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:val}) });
+  const data = await res.json();
+  if (data.ok) {
+    savedOperators = data.operators;
+    showToast('✓ Operator "' + val + '" saved');
+    const saved = document.getElementById('operator-saved');
+    if (saved) { saved.style.opacity='1'; setTimeout(()=>saved.style.opacity='0',1500); }
+  }
+}
+
+async function deleteOperator(name) {
+  await fetch('/operators/' + encodeURIComponent(name), { method:'DELETE' });
+  savedOperators = savedOperators.filter(n => n !== name);
+  const dropdown = document.getElementById('op-dropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  showToast('Removed "' + name + '"');
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.operator-bar')) {
+    const d = document.getElementById('op-dropdown');
+    if (d) d.style.display = 'none';
+  }
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.pane').forEach(p => {
+    p.classList.toggle('active', p.id === 'pane-' + tab);
+  });
+  if (tab === 'log') loadLogFiles();
+  if (tab === 'settings') {
+    renderSettingsUrls();
+    renderShortcutGrid(cfg.shortcuts || defaultShortcuts);
+    renderShortcutSummary(cfg.shortcuts || defaultShortcuts);
+    renderScPresets(cfg.scPresets || []);
+    renderMixGrid(cfg.targetMixes || [0]);
+    renderPresets(cfg.mixPresets || []);
+    renderSceneList();
+  }
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => {
+    setWsStatus(true);
+    if (reconnTimer) { clearInterval(reconnTimer); reconnTimer = null; }
+  };
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'init') {
+      liveState = msg.live;
+      previewState = msg.preview;
+      overlayLive = msg.overlayLive || false;
+      cfg = msg.config || cfg;
+      if (msg.history) { historyItems = msg.history; renderHistory(); }
+      renderLive(liveState, false);
+      renderPreview(previewState, false);
+      updateStateBar();
+      setVmixStatus(msg.vmixConnected);
+      loadNames();
+      applyConfig(cfg);
+    } else if (msg.type === 'title_changed') {
+      liveState = msg.live;
+      renderLive(liveState, true);
+      updateStateBar();
+      flashCompanion(liveState.isBlank);
+      addHistory({ ...liveState, event: liveState.isBlank ? 'CLEARED' : 'LIVE', time: msg.timestamp });
+      addLiveLog({ ...liveState, event: liveState.isBlank ? 'CLEARED' : 'LIVE', time: msg.timestamp, triggeredBy: msg.updatedBy });
+    } else if (msg.type === 'preview_changed') {
+      previewState = msg.preview;
+      renderPreview(previewState, true);
+    } else if (msg.type === 'vmix_status') {
+      setVmixStatus(msg.connected);
+    } else if (msg.type === 'config_changed') {
+      cfg = msg.config; applyConfig(cfg);
+    } else if (msg.type === 'db_reloaded') {
+      loadNames();
+    } else if (msg.type === 'overlay_state') {
+      overlayLive = msg.overlayLive;
+      updateStateBar();
+    } else if (msg.type === 'session_reset') {
+      sessionLog = [];
+      historyItems = [];
+      renderLiveLog();
+      renderHistory();
+      const cnt = document.getElementById('log-count');
+      if (cnt) cnt.textContent = '0 entries';
+    }
+  };
+  ws.onclose = () => { setWsStatus(false); reconnTimer = setInterval(connectWS, 3000); };
+  ws.onerror = () => ws.close();
+}
+
+function setWsStatus(ok) {
+  const p = document.getElementById('ws-pill');
+  const t = document.getElementById('ws-text');
+  p.classList.toggle('ok', ok);
+  t.textContent = ok ? 'Connected' : 'Reconnecting';
+}
+function setVmixStatus(ok) {
+  const p = document.getElementById('vmix-status-pill');
+  const t = document.getElementById('vmix-status-text');
+  p.className = 'status-pill ' + (ok ? 'vmix-ok' : 'vmix-err');
+  t.textContent = ok ? 'VMix connected' : 'VMix offline';
+}
+
+// ── Render slots ──────────────────────────────────────────────────────────────
+function renderLive(cur, flash) {
+  const slot = document.getElementById('slot-live');
+  const nameEl = document.getElementById('live-name');
+  const subEl = document.getElementById('live-sub');
+  const orgEl = document.getElementById('live-org');
+  const airName = document.getElementById('air-name');
+  const airTitle = document.getElementById('air-title');
+  const airOrg = document.getElementById('air-org');
+  const airBadge = document.getElementById('air-badge');
+  const airBanner = document.getElementById('air-banner');
+
+  if (cur.isBlank) {
+    slot.classList.remove('has-content');
+    nameEl.className = 'slot-name empty'; nameEl.textContent = 'Blank';
+    subEl.style.display = 'none'; orgEl.style.display = 'none';
+    airName.className = 'air-name blank'; airName.textContent = 'No title active';
+    airTitle.style.display = 'none'; airOrg.style.display = 'none';
+    airBadge.style.cssText = 'background:var(--red-bg);color:var(--red);border:1px solid #5c1f1f;padding:1px 8px;border-radius:100px;font-size:10px;font-weight:700';
+    airBadge.textContent = 'BLANK';
+    if (flash) { airBanner.classList.add('flash-red'); setTimeout(() => airBanner.classList.remove('flash-red'), 600); }
+  } else {
+    slot.classList.add('has-content');
+    nameEl.className = 'slot-name'; nameEl.textContent = cur.name;
+    if (cur.title) { subEl.style.display = ''; subEl.textContent = cur.title; } else subEl.style.display = 'none';
+    if (cur.organisation) { orgEl.style.display = ''; orgEl.textContent = cur.organisation; } else orgEl.style.display = 'none';
+    airName.className = 'air-name'; airName.textContent = cur.name;
+    if (cur.title) { airTitle.style.display = ''; airTitle.textContent = cur.title; } else airTitle.style.display = 'none';
+    if (cur.organisation) { airOrg.style.display = ''; airOrg.textContent = cur.organisation; } else airOrg.style.display = 'none';
+    airBadge.style.cssText = 'background:var(--teal-dim);color:var(--teal);border:1px solid var(--teal);padding:1px 8px;border-radius:100px;font-size:10px;font-weight:700';
+    airBadge.textContent = 'LIVE';
+    if (flash) { airBanner.classList.add('flash-green'); setTimeout(() => airBanner.classList.remove('flash-green'), 600); }
+  }
+  updateCards();
+}
+
+function renderPreview(prev, flash) {
+  const slot = document.getElementById('slot-preview');
+  const nameEl = document.getElementById('prev-name');
+  const subEl = document.getElementById('prev-sub');
+  const orgEl = document.getElementById('prev-org');
+  const takeBtn = document.getElementById('btn-take-preview');
+
+  const dataOnlyBtn = document.getElementById('btn-send-data-only');
+  const vmixEnabled = cfg.vmixEnabled !== false;
+  if (prev.isBlank) {
+    slot.classList.remove('has-content');
+    nameEl.className = 'slot-name empty'; nameEl.textContent = 'Empty';
+    subEl.style.display = 'none'; orgEl.style.display = 'none';
+    takeBtn.disabled = true;
+    if (dataOnlyBtn) dataOnlyBtn.disabled = true;
+  } else {
+    slot.classList.add('has-content');
+    nameEl.className = 'slot-name'; nameEl.textContent = prev.name;
+    if (prev.title) { subEl.style.display = ''; subEl.textContent = prev.title; } else subEl.style.display = 'none';
+    if (prev.organisation) { orgEl.style.display = ''; orgEl.textContent = prev.organisation; } else orgEl.style.display = 'none';
+    if (dataOnlyBtn) dataOnlyBtn.disabled = false;
+    takeBtn.disabled = !vmixEnabled;
+    if (flash) {
+      slot.style.outline = '2px solid var(--blue)';
+      setTimeout(() => slot.style.outline = '', 600);
+    }
+  }
+  updateCards();
+}
+
+// ── Names ─────────────────────────────────────────────────────────────────────
+async function loadNames() {
+  const res = await fetch('/db');
+  namesDb = await res.json();
+  filtered = namesDb;
+  renderGrid();
+}
+
+function filterNames(q) {
+  const term = q.toLowerCase().trim();
+  filtered = term ? namesDb.filter(p =>
+    p.name.toLowerCase().includes(term) ||
+    p.title.toLowerCase().includes(term) ||
+    String(p.id).includes(term) ||
+    (p.organisation || '').toLowerCase().includes(term)
+  ) : namesDb;
+  renderGrid();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('names-grid');
+  if (!grid) return;
+  if (!filtered.length) { grid.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">No results</div>'; return; }
+  grid.innerHTML = filtered.map(p => {
+    const isLive = !liveState.isBlank && String(liveState.id) === String(p.id);
+    const isPrev = !previewState.isBlank && String(previewState.id) === String(p.id);
+    return `<div class="name-card ${isLive ? 'is-live' : isPrev ? 'is-preview' : ''}" id="card-${p.id}" onclick="cardClick(${p.id})">
+      <div class="nc-id">#${p.id}</div>
+      <div class="nc-name">${p.name}</div>
+      <div class="nc-title">${p.title || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateCards() {
+  document.querySelectorAll('.name-card').forEach(c => {
+    const id = c.id.replace('card-','');
+    const isLive = !liveState.isBlank && String(liveState.id) === id;
+    const isPrev = !previewState.isBlank && String(previewState.id) === id;
+    c.className = `name-card ${isLive ? 'is-live' : isPrev ? 'is-preview' : ''}`;
+  });
+}
+
+function cardClick(id) {
+  // Single click → preview, double-click → take live
+  const p = namesDb.find(r => String(r.id) === String(id));
+  if (!p) return;
+  fetch(`/preview/${id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ operator:operatorName||'operator' }) });
+}
+
+// ── ID input ──────────────────────────────────────────────────────────────────
+function onIdInput(val) {
+  const trimmed = val.trim();
+  inputPreview = null;
+  const prev = document.getElementById('id-preview');
+  const btnPrev = document.getElementById('btn-to-preview');
+  const btnTake = document.getElementById('btn-take-live');
+  const input = document.getElementById('id-input');
+  if (!trimmed) {
+    if (prev) prev.innerHTML = '';
+    if (input) input.style.borderColor = '';
+    btnPrev.disabled = true; btnTake.disabled = true; return;
+  }
+  const person = namesDb.find(r => String(r.id) === trimmed);
+  if (person) {
+    inputPreview = person;
+    if (prev) prev.innerHTML = `<span style="font-weight:700;color:var(--text)">${person.name}</span> <span style="color:var(--text2);font-size:11px">${person.title || ''}</span>`;
+    if (input) input.style.borderColor = 'var(--teal)';
+    btnPrev.disabled = false; btnTake.disabled = false;
+  } else {
+    if (prev) prev.innerHTML = '<span style="color:var(--red);font-size:11px;font-style:italic">ID not found</span>';
+    if (input) input.style.borderColor = 'var(--red)';
+    btnPrev.disabled = true; btnTake.disabled = true;
+  }
+}
+
+function onIdKey(e) {
+  if (e.key === 'Enter' && inputPreview) takeFromInput();
+}
+
+function sendToPreview() {
+  if (!inputPreview) return;
+  fetch(`/preview/${inputPreview.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({operator:operatorName||'operator'}) });
+  clearIdInput();
+}
+
+function takeFromInput() {
+  if (!inputPreview) return;
+  fetch(`/take/${inputPreview.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({operator:operatorName||'operator'}) });
+  const delay = (cfg.takeLiveDelay || 500) + 300;
+  setTimeout(() => { overlayLive = true; updateStateBar(); }, delay);
+  clearIdInput();
+}
+
+function clearIdInput() {
+  const inp = document.getElementById('id-input');
+  if (inp) { inp.value = ''; inp.style.borderColor = ''; }
+  const prev = document.getElementById('id-preview');
+  if (prev) prev.innerHTML = '';
+  document.getElementById('btn-to-preview').disabled = true;
+  document.getElementById('btn-take-live').disabled = true;
+  inputPreview = null;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+// Send data only — no VMix trigger, hands control to VMix operator
+function takePreviewDataOnly() {
+  if (previewState.isBlank) return;
+  fetch(`/set/${previewState.id}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({operator:operatorName||'operator'}) });
+}
+
+// Send data + trigger VMix overlay after delay
+function takePreviewLive() {
+  fetch('/take-preview', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({operator:operatorName||'operator'}) });
+  const delay = (cfg.takeLiveDelay || 500) + 300;
+  setTimeout(() => { overlayLive = true; updateStateBar(); }, delay);
+}
+
+function clearLive() {
+  overlayLive = false;
+  updateStateBar();
+  fetch('/clear', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({operator:operatorName||'operator'}) });
+}
+
+function vmixIn() {
+  fetch('/vmix/in', { method:'POST' })
+    .then(r=>r.json()).then(d=>{ overlayLive = d.overlayLive !== undefined ? d.overlayLive : true; updateStateBar(); })
+    .catch(()=>{ overlayLive=true; updateStateBar(); });
+}
+
+function vmixOut() {
+  fetch('/vmix/out', { method:'POST' })
+    .then(r=>r.json()).then(d=>{ overlayLive = d.overlayLive !== undefined ? d.overlayLive : false; updateStateBar(); })
+    .catch(()=>{ overlayLive=false; updateStateBar(); });
+}
+
+// Hide graphic only — does NOT clear data, VMix operator can bring back
+function vmixOutOnly() {
+  fetch('/vmix/out', { method:'POST' })
+    .then(()=>{ overlayLive=false; updateStateBar(); });
+}
+
+function vmixDataAndIn() {
+  if (liveState.isBlank) { alert('No title is currently set. Set a live title first.'); return; }
+  fetch('/vmix/in', { method:'POST' });
+}
+
+// Apply VMix enabled/disabled state across all control buttons
+// ── Shortcuts enable/disable toggle ──────────────────────────────────────────
+let shortcutsEnabled = true;
+
+let _scToggleSaving = false;
+function toggleShortcutsEnabled(enabled, silent) {
+  shortcutsEnabled = enabled;
+  cfg.shortcutsEnabled = enabled;
+  // Update visual state
+  const track = document.getElementById('sc-toggle-track');
+  const thumb = document.getElementById('sc-toggle-thumb');
+  const label = document.getElementById('sc-enabled-label');
+  const togEl = document.getElementById('cfg-shortcuts-enabled');
+  if (track) track.style.background = enabled ? 'var(--teal)' : 'var(--border2)';
+  if (thumb) thumb.style.transform = enabled ? 'translateX(16px)' : 'translateX(0)';
+  if (label) { label.textContent = enabled ? 'Enabled' : 'Disabled'; label.style.color = enabled ? 'var(--teal)' : 'var(--red)'; }
+  if (togEl) togEl.checked = enabled;
+  const grid = document.getElementById('shortcut-grid');
+  if (grid) grid.style.opacity = enabled ? '1' : '0.4';
+  // Only save + toast when triggered by user click, not by applyConfig
+  if (!silent && !_scToggleSaving) {
+    _scToggleSaving = true;
+    showToast(enabled ? '✓ Shortcuts enabled' : 'Shortcuts disabled');
+    fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ...cfg }) })
+      .finally(() => { _scToggleSaving = false; });
+  }
+}
+
+function applyVmixEnabled(enabled) {
+  const panel = document.getElementById('vmix-control-panel');
+  const badge = document.getElementById('vmix-disabled-badge');
+  const btns = document.querySelectorAll('.vmix-ctrl');
+  const takeLiveBtn = document.getElementById('btn-take-preview');
+  const outOnlyBtn = document.getElementById('btn-vmix-out-only');
+  if (panel) panel.style.opacity = enabled ? '1' : '0.45';
+  if (badge) badge.style.display = enabled ? 'none' : 'inline-block';
+  btns.forEach(b => { b.disabled = !enabled; });
+  // Send + go live button only works when VMix control enabled
+  if (takeLiveBtn) takeLiveBtn.disabled = !enabled || previewState.isBlank;
+  if (outOnlyBtn) outOnlyBtn.disabled = !enabled;
+  // Update toggle visual
+  const track = document.getElementById('toggle-track');
+  const thumb = document.getElementById('toggle-thumb');
+  if (track) track.style.background = enabled ? 'var(--teal)' : 'var(--border2)';
+  if (thumb) thumb.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+}
+
+function sendCmd(ep) {
+  fetch(ep, { method:'POST' });
+  if (ep === '/next' || ep === '/prev') {
+    const delay = (cfg.takeLiveDelay || 500) + 200;
+    setTimeout(() => { overlayLive = true; updateStateBar(); }, delay);
+  }
+}
+
+// ── State bar (data loaded vs overlay live) ──────────────────────────────────
+function updateStateBar() {
+  const dataChip    = document.getElementById('state-data');
+  const overlayChip = document.getElementById('state-overlay');
+  const dataText    = document.getElementById('state-data-text');
+  const overlayText = document.getElementById('state-overlay-text');
+  if (!dataChip || !overlayChip) return;
+
+  if (liveState.isBlank) {
+    // Nothing loaded
+    dataChip.className    = 'state-chip blank';
+    dataText.textContent  = 'No data';
+    overlayChip.className = 'state-chip blank';
+    overlayText.textContent = 'Overlay off';
+  } else if (!overlayLive) {
+    // Data loaded but graphic not on screen
+    dataChip.className    = 'state-chip data-loaded';
+    dataText.textContent  = liveState.name || 'Data loaded';
+    overlayChip.className = 'state-chip blank';
+    overlayText.textContent = '~ Overlay off';
+  } else {
+    // Fully live
+    dataChip.className    = 'state-chip overlay-live';
+    dataText.textContent  = liveState.name || 'Live';
+    overlayChip.className = 'state-chip overlay-live';
+    overlayText.textContent = '~ On screen in VMix';  // approx — polls every 2s
+  }
+}
+
+// ── Companion ─────────────────────────────────────────────────────────────────
+function flashCompanion(isBlank) {
+  const dot = document.getElementById('companion-dot');
+  const label = document.getElementById('companion-label');
+  dot.classList.remove('flash');
+  void dot.offsetWidth;
+  dot.classList.add('flash');
+  setTimeout(() => dot.classList.remove('flash'), 900);
+  dot.classList.toggle('live', !isBlank);
+  label.textContent = isBlank ? 'Blank' : (liveState.name || 'Live');
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function addHistory(item) {
+  // Deduplicate — skip if same id+event as most recent entry
+  if (historyItems.length > 0) {
+    const last = historyItems[0];
+    if (String(last.id) === String(item.id) && last.event === item.event) return;
+  }
+  historyItems.unshift(item);
+  if (historyItems.length > 20) historyItems.pop();
+  renderHistory();
+  // Update count badge
+  const cnt = document.getElementById('log-count');
+  if (cnt) cnt.textContent = historyItems.length + ' entries';
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!historyItems.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3)">Nothing yet</div>'; return; }
+  el.innerHTML = historyItems.map(h => `
+    <div class="history-item ${h.isBlank ? 'clear-item' : 'live-item'}">
+      <span class="h-event ${h.isBlank ? 'cleared' : 'live'}">${h.isBlank ? 'Cleared' : 'Live'}</span>
+      <div class="h-name">${h.name || '—'}</div>
+      <div class="h-sub">${h.title || ''}</div>
+      <div class="h-time">${formatTime(h.time)}</div>
+    </div>
+  `).join('');
+}
+
+// ── Session log ───────────────────────────────────────────────────────────────
+function addLiveLog(entry) {
+  // Deduplicate — skip if same id+event as most recent log entry
+  if (sessionLog.length > 0) {
+    const last = sessionLog[sessionLog.length - 1];
+    if (String(last.id) === String(entry.id) && last.event === entry.event) return;
+  }
+  sessionLog.push(entry);
+  const liveCnt = document.getElementById('live-log-count');
+  if (liveCnt) liveCnt.textContent = sessionLog.length;
+  renderLiveLog();
+}
+
+function renderLiveLog() {
+  const el = document.getElementById('live-log-table');
+  if (!el) return;
+  if (!sessionLog.length) { el.innerHTML = '<div style="color:var(--text3)">Nothing logged yet</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <tr style="background:var(--bg3)">
+      <th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);border-bottom:1px solid var(--border)">Time</th>
+      <th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);border-bottom:1px solid var(--border)">Event</th>
+      <th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);border-bottom:1px solid var(--border)">Name</th>
+      <th style="padding:6px 8px;text-align:left;font-size:10px;color:var(--text3);border-bottom:1px solid var(--border)">Role</th>
+    </tr>
+    ${[...sessionLog].reverse().map(e => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 8px;font-size:11px;color:var(--text3)">${formatTime(e.time)}</td>
+        <td style="padding:5px 8px">
+          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;
+            ${e.event==='LIVE'?'background:var(--teal-dim);color:var(--teal)':
+              e.event==='PREVIEW'?'background:var(--blue-dim);color:var(--blue)':
+              'background:var(--red-dim);color:var(--red)'}">
+            ${e.event}
+          </span>
+        </td>
+        <td style="padding:5px 8px;font-size:12px;font-weight:600;color:var(--text)">${e.name||'—'}</td>
+        <td style="padding:5px 8px;font-size:11px;color:var(--text2)">${e.title||''}</td>
+      </tr>
+    `).join('')}
+  </table>`;
+}
+
+async function exportLog() {
+  const btn = document.getElementById('btn-export');
+  btn.textContent = 'Exporting…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/export', { method:'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = '✓ Exported';
+      btn.style.background = 'var(--teal)';
+      setTimeout(() => { btn.textContent = 'Export to Excel'; btn.disabled = false; btn.style.background = ''; }, 3000);
+      loadLogFiles();
+    }
+  } catch(e) {
+    btn.textContent = 'Export to Excel'; btn.disabled = false;
+  }
+}
+
+async function loadLogFiles() {
+  const el = document.getElementById('log-files-list');
+  if (!el) return;
+  try {
+    const res = await fetch('/logs');
+    const files = await res.json();
+    if (!files.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3)">No saved logs yet</div>'; return; }
+    el.innerHTML = '<div class="log-files">' + files.map(f => `
+      <div class="log-file-row">
+        <div class="log-file-name">${f}</div>
+        <a class="log-dl-btn" href="/logs/${f}" download>Download</a>
+      </div>
+    `).join('') + '</div>';
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--red)">Error loading files</div>';
+  }
+}
+
+async function newSession() {
+  if (!confirm('Start a new session? This will clear the session log and history sidebar.')) return;
+  await fetch('/new-session', { method:'POST' });
+  sessionLog = [];
+  historyItems = [];
+  renderLiveLog();
+  renderHistory();
+  const cnt = document.getElementById('log-count');
+  if (cnt) cnt.textContent = '0 entries';
+  const liveCnt = document.getElementById('live-log-count');
+  if (liveCnt) liveCnt.textContent = '0';
+  showToast('✓ New session started');
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+function applyConfig(c) {
+  cfg = c;
+  const h = document.getElementById('cfg-host'); if (h) h.value = c.vmixHost || '';
+  const p = document.getElementById('cfg-port'); if (p) p.value = c.vmixPort || 8088;
+  const i = document.getElementById('cfg-input'); if (i) i.value = c.inputName || '';
+  const o = document.getElementById('cfg-overlay'); if (o) o.value = c.overlayChannel || 1;
+  const d = document.getElementById('cfg-delay'); if (d) d.value = c.takeLiveDelay || 500;
+  const dd = document.getElementById('vmix-delay-display'); if (dd) dd.textContent = c.takeLiveDelay || 500;
+  // VMix enable toggle
+  const tog = document.getElementById('cfg-vmix-enabled');
+  const enabled = c.vmixEnabled !== false;
+  if (tog) tog.checked = enabled;
+  applyVmixEnabled(enabled);
+  // Shortcuts toggle
+  const scEnabled = c.shortcutsEnabled !== false;
+  toggleShortcutsEnabled(scEnabled, true); // silent=true prevents save loop
+  renderSettingsUrls();
+  renderMixGrid(c.targetMixes || [0]);
+  renderPresets(c.mixPresets || []);
+  if (c.shortcuts) renderShortcutGrid(c.shortcuts);
+  renderShortcutSummary(c.shortcuts || defaultShortcuts);
+  renderScPresets(c.scPresets || []);
+}
+
+function renderSettingsUrls() {
+  const b = window.location.origin;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('cfg-url-name',  `${b}/vmix/name`);
+  set('cfg-url-title', `${b}/vmix/title`);
+  set('cfg-url-org',   `${b}/vmix/organisation`);
+  set('sd-url-next',   `POST ${b}/next`);
+  set('sd-url-prev',   `POST ${b}/prev`);
+  set('sd-url-clear',  `POST ${b}/clear`);
+}
+
+async function saveConfig() {
+  const c = {
+    vmixHost:       document.getElementById('cfg-host')?.value.trim() || '127.0.0.1',
+    vmixPort:       parseInt(document.getElementById('cfg-port')?.value) || 8088,
+    inputName:      document.getElementById('cfg-input')?.value.trim() || 'Lower Third',
+    overlayChannel: parseInt(document.getElementById('cfg-overlay')?.value) || 1,
+    takeLiveDelay:  parseInt(document.getElementById('cfg-delay')?.value) || 500,
+    vmixEnabled:       document.getElementById('cfg-vmix-enabled')?.checked !== false,
+    shortcutsEnabled:  document.getElementById('cfg-shortcuts-enabled')?.checked !== false,
+    targetMixes:    cfg.targetMixes || [0],
+    mixPresets:     cfg.mixPresets || [],
+    shortcuts:      cfg.shortcuts || defaultShortcuts,
+  };
+  const res = await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(c) });
+  const data = await res.json();
+  if (data.ok) { cfg = data.config; applyConfig(cfg); showToast('✓ Settings saved'); }
+  else showToast('Save failed', 'error');
+}
+
+async function testVmix() {
+  const el = document.getElementById('vmix-test-result');
+  el.textContent = 'Testing…'; el.style.color = 'var(--text3)';
+  try {
+    const res = await fetch('/status');
+    const s = await res.json();
+    if (s.vmixConnected) {
+      el.textContent = '✓ Connected'; el.style.color = 'var(--teal)';
+    } else {
+      el.textContent = '✗ Cannot reach VMix'; el.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    el.textContent = '✗ Error'; el.style.color = 'var(--red)';
+  }
+  setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }); } catch(e) { return iso; }
+}
+
+// ── Mix routing ───────────────────────────────────────────────────────────────
+const MIX_LABELS = { 0: 'Master' };
+for (let i = 1; i <= 16; i++) MIX_LABELS[i] = `Mix ${i}`;
+
+function renderMixGrid(selected) {
+  const grid = document.getElementById('mix-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(MIX_LABELS).map(([num, label]) => {
+    const n = parseInt(num);
+    const on = (selected || []).includes(n);
+    return `<label style="display:flex;align-items:center;gap:7px;padding:7px 10px;background:${on ? 'var(--teal-dim)' : 'var(--bg3)'};border:1px solid ${on ? 'var(--teal)' : 'var(--border)'};border-radius:6px;cursor:pointer;font-size:12px;transition:all .12s;user-select:none">
+      <input type="checkbox" data-mix="${n}" ${on ? 'checked' : ''} onchange="onMixChange()" style="width:14px;height:14px;accent-color:var(--teal);cursor:pointer">
+      <span style="color:${on ? 'var(--teal)' : 'var(--text2)'};font-weight:${on ? '700' : '400'}">${label}</span>
+    </label>`;
+  }).join('');
+}
+
+function onMixChange() {
+  // Live-preview which mixes are selected
+  const checked = [...document.querySelectorAll('#mix-grid input[data-mix]:checked')].map(el => parseInt(el.dataset.mix));
+  // Update visual states
+  document.querySelectorAll('#mix-grid label').forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    const on = cb.checked;
+    lbl.style.background = on ? 'var(--teal-dim)' : 'var(--bg3)';
+    lbl.style.borderColor = on ? 'var(--teal)' : 'var(--border)';
+    const span = lbl.querySelector('span');
+    if (span) { span.style.color = on ? 'var(--teal)' : 'var(--text2)'; span.style.fontWeight = on ? '700' : '400'; }
+  });
+}
+
+function getSelectedMixes() {
+  return [...document.querySelectorAll('#mix-grid input[data-mix]:checked')].map(el => parseInt(el.dataset.mix));
+}
+
+function selectAllMixes() {
+  document.querySelectorAll('#mix-grid input[data-mix]').forEach(el => { el.checked = true; });
+  onMixChange();
+}
+
+function clearAllMixes() {
+  document.querySelectorAll('#mix-grid input[data-mix]').forEach(el => { el.checked = false; });
+  onMixChange();
+}
+
+async function saveMixConfig() {
+  const mixes = getSelectedMixes();
+  if (!mixes.length) { alert('Select at least one mix'); return; }
+  cfg.targetMixes = mixes;
+  const res = await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ...cfg, targetMixes: mixes }) });
+  const data = await res.json();
+  if (data.ok) { cfg = data.config; showSavedFeedback('mix-grid'); showToast('✓ Mix routing saved'); }
+}
+
+function showSavedFeedback(nearId) {
+  const el = document.getElementById(nearId);
+  if (!el) return;
+  const fb = document.createElement('div');
+  fb.textContent = '✓ Saved';
+  fb.style.cssText = 'font-size:11px;color:var(--teal);margin-top:6px;font-weight:700';
+  el.parentNode.appendChild(fb);
+  setTimeout(() => fb.remove(), 2000);
+}
+
+// ── Mix presets ───────────────────────────────────────────────────────────────
+function renderPresets(presets) {
+  const el = document.getElementById('preset-list');
+  if (!el) return;
+  if (!presets.length) { el.innerHTML = '<div style="font-size:11px;color:var(--text3)">No presets saved yet</div>'; return; }
+  el.innerHTML = presets.map(p => {
+    const isActive = cfg.activePreset === p.name;
+    const mixLabels = p.mixes.map(m => MIX_LABELS[m] || `Mix ${m}`).join(', ');
+    return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:${isActive ? 'var(--purple-dim)' : 'var(--bg3)'};border:1px solid ${isActive ? 'var(--purple)' : 'var(--border)'};border-radius:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;color:${isActive ? 'var(--purple2)' : 'var(--text)'}">${p.name}</div>
+        <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${mixLabels}</div>
+      </div>
+      <button onclick="applyPreset('${p.name}')" style="background:var(--purple-dim);color:var(--purple2);border:1px solid #3a3280;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">Apply</button>
+      <button onclick="deletePreset('${p.name}')" style="background:var(--red-dim);color:var(--red);border:1px solid #5c2020;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function savePreset() {
+  const nameEl = document.getElementById('preset-name-input');
+  const name = nameEl?.value.trim();
+  if (!name) { alert('Enter a preset name'); return; }
+  const mixes = getSelectedMixes();
+  if (!mixes.length) { alert('Select at least one mix first'); return; }
+  const res = await fetch('/presets', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name, mixes }) });
+  const data = await res.json();
+  if (data.ok) {
+    cfg.mixPresets = data.presets;
+    cfg.activePreset = name;
+    renderPresets(cfg.mixPresets);
+    if (nameEl) nameEl.value = '';
+  }
+}
+
+async function applyPreset(name) {
+  const res = await fetch(`/presets/${encodeURIComponent(name)}/apply`, { method:'POST' });
+  const data = await res.json();
+  if (data.ok) { cfg = data.config; renderMixGrid(cfg.targetMixes); renderPresets(cfg.mixPresets); }
+}
+
+async function deletePreset(name) {
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  await fetch(`/presets/${encodeURIComponent(name)}`, { method:'DELETE' });
+  cfg.mixPresets = cfg.mixPresets.filter(p => p.name !== name);
+  if (cfg.activePreset === name) cfg.activePreset = null;
+  renderPresets(cfg.mixPresets);
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+const defaultShortcuts = {
+  sendDataOnly:  'D',
+  sendAndGoLive: 'G',
+  clearAndHide:  'C',
+  nextName:      'ArrowRight',
+  prevName:      'ArrowLeft',
+  overlayIn:     'I',
+  overlayOut:    'O',
+  takePreview:   'Enter'
+};
+
+const shortcutActions = {
+  sendDataOnly:  { label: 'Send data only (from preview)',  fn: () => takePreviewDataOnly() },
+  sendAndGoLive: { label: 'Send + go live',                 fn: () => takePreviewLive() },
+  clearAndHide:  { label: 'Clear data + hide graphic',      fn: () => clearLive() },
+  nextName:      { label: 'Next name (StreamDeck)',          fn: () => sendCmd('/next') },
+  prevName:      { label: 'Previous name (StreamDeck)',      fn: () => sendCmd('/prev') },
+  overlayIn:     { label: 'Overlay in (graphic on screen)', fn: () => vmixIn() },
+  overlayOut:    { label: 'Overlay out (graphic off)',       fn: () => vmixOut() },
+  takePreview:   { label: 'Take preview → live',             fn: () => takePreviewLive() }
+};
+
+let listeningFor = null; // which action is waiting for a keypress
+
+function renderShortcutGrid(shortcuts) {
+  const grid = document.getElementById('shortcut-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(shortcutActions).map(([key, action]) => {
+    const assigned = (shortcuts || defaultShortcuts)[key] || '';
+    const displayKey = formatKeyDisplay(assigned);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
+      <div style="flex:1;font-size:11px;color:var(--text2);line-height:1.3">${action.label}</div>
+      <div
+        id="sc-${key}"
+        data-action="${key}"
+        style="min-width:64px;padding:4px 8px;background:var(--bg4);border:1px solid var(--border2);border-radius:5px;font-family:monospace;font-size:12px;font-weight:700;color:var(--purple2);text-align:center;cursor:pointer;transition:all .15s;user-select:none;flex-shrink:0"
+        title="Click to reassign"
+      >${displayKey || '—'}</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', () => startListening(el.dataset.action));
+  });
+}
+
+function formatKeyDisplay(key) {
+  if (!key) return '—';
+  const map = { ArrowLeft: '← Left', ArrowRight: '→ Right', ArrowUp: '↑ Up', ArrowDown: '↓ Down',
+    Enter: '↵ Enter', Escape: 'Esc', Backspace: '⌫', Delete: 'Del', Tab: 'Tab', ' ': 'Space' };
+  return map[key] || key.toUpperCase();
+}
+
+function startListening(action) {
+  if (listeningFor) stopListening(false);
+  listeningFor = action;
+  const el = document.getElementById('sc-' + action);
+  if (el) {
+    el.textContent = '▸ press key';
+    el.style.borderColor = 'var(--amber)';
+    el.style.color = 'var(--amber)';
+    el.style.background = 'var(--amber-dim)';
+    el.style.outline = '2px solid var(--amber)';
+  }
+}
+
+function stopListening(save) {
+  if (!listeningFor) return;
+  const el = document.getElementById('sc-' + listeningFor);
+  if (el && !save) {
+    const cur = (cfg.shortcuts || defaultShortcuts)[listeningFor];
+    el.textContent = formatKeyDisplay(cur || '');
+    el.style.borderColor = 'var(--border2)';
+    el.style.color = 'var(--purple2)';
+    el.style.background = 'var(--bg4)';
+    el.style.outline = 'none';
+  }
+  listeningFor = null;
+}
+
+function renderShortcutSummary(shortcuts) {
+  const el = document.getElementById('shortcut-summary');
+  if (!el) return;
+  el.innerHTML = Object.entries(shortcutActions).map(([key, action]) => {
+    const k = (shortcuts || defaultShortcuts)[key];
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg4);border-radius:5px">
+      <kbd style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--purple2);font-family:monospace;min-width:52px;text-align:center">${formatKeyDisplay(k)}</kbd>
+      <span style="color:var(--text2);font-size:11px">${action.label}</span>
+    </div>`;
+  }).join('');
+}
+
+async function saveShortcuts() {
+  const res = await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ...cfg }) });
+  const data = await res.json();
+  if (data.ok) { cfg = data.config; renderShortcutSummary(cfg.shortcuts); showToast('✓ Shortcuts saved'); }
+}
+
+function resetShortcuts() {
+  if (!confirm('Reset all shortcuts to defaults?')) return;
+  cfg.shortcuts = { ...defaultShortcuts };
+  renderShortcutGrid(cfg.shortcuts);
+  renderShortcutSummary(cfg.shortcuts);
+  saveShortcuts();
+}
+
+// Global key handler
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+  // If we're listening for a shortcut assignment
+  if (listeningFor) {
+    e.preventDefault();
+    const key = e.key === 'Escape' ? null : e.key;
+    const el = document.getElementById(`sc-${listeningFor}`);
+    if (!cfg.shortcuts) cfg.shortcuts = { ...defaultShortcuts };
+    if (key) {
+      cfg.shortcuts[listeningFor] = key;
+      if (el) {
+        el.textContent = formatKeyDisplay(key);
+        el.style.borderColor = 'var(--teal)'; el.style.color = 'var(--teal)';
+        el.style.background = 'var(--teal-dim)'; el.style.outline = 'none';
+        setTimeout(() => {
+          el.style.borderColor = 'var(--border2)'; el.style.color = 'var(--purple2)';
+          el.style.background = 'var(--bg4)';
+        }, 1000);
+      }
+      showToast('Key assigned: ' + formatKeyDisplay(key));
+    } else {
+      cfg.shortcuts[listeningFor] = '';
+      if (el) {
+        el.textContent = '—'; el.style.borderColor = 'var(--border2)';
+        el.style.color = 'var(--text3)'; el.style.background = 'var(--bg4)'; el.style.outline = 'none';
+      }
+      showToast('Shortcut cleared');
+    }
+    listeningFor = null;
+    renderShortcutSummary(cfg.shortcuts);
+    return;
+  }
+
+  // Don't fire shortcuts while typing or disabled
+  if (isTyping) return;
+  if (!shortcutsEnabled) return;
+  // Prevent Enter from firing both shortcut AND button click
+  if (e.key === 'Enter' && document.activeElement?.tagName === 'BUTTON') return;
+
+  const shortcuts = cfg.shortcuts || defaultShortcuts;
+  for (const [action, key] of Object.entries(shortcuts)) {
+    if (!key) continue;
+    const match = e.key === key || e.key.toUpperCase() === key.toUpperCase();
+    if (match) {
+      e.preventDefault();
+      shortcutActions[action]?.fn();
+      // Visual flash on the matched shortcut key badge
+      const els = document.querySelectorAll(`[id="sc-${action}"]`);
+      els.forEach(el => {
+        el.style.background = 'var(--purple-dim)';
+        el.style.borderColor = 'var(--purple)';
+        setTimeout(() => { el.style.background = 'var(--bg4)'; el.style.borderColor = 'var(--border2)'; }, 300);
+      });
+      break;
+    }
+  }
+});
+
+// ── Shortcut profiles ────────────────────────────────────────────────────────
+function renderScPresets(presets) {
+  const el = document.getElementById('sc-preset-list');
+  if (!el) return;
+  if (!presets || !presets.length) { el.innerHTML = '<span style="font-size:11px;color:var(--text3)">No profiles saved</span>'; return; }
+  el.innerHTML = (presets).map(p => {
+    const isActive = (cfg.activeScPreset === p.name);
+    return `<button onclick="applyScPreset('${p.name}')" style="padding:4px 12px;border-radius:100px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid;
+      background:${isActive ? 'var(--purple-dim)' : 'var(--bg4)'};
+      border-color:${isActive ? 'var(--purple)' : 'var(--border2)'};
+      color:${isActive ? 'var(--purple2)' : 'var(--text2)'};
+      transition:all .15s">${p.name}${isActive ? ' ✓' : ''}</button>
+    <button onclick="deleteScPreset('${p.name}')" style="padding:3px 7px;border-radius:100px;font-size:10px;cursor:pointer;border:1px solid var(--red-dim);background:var(--red-dim);color:var(--red)">✕</button>`;
+  }).join('');
+}
+
+function saveShortcutPreset() {
+  const nameEl = document.getElementById('sc-preset-name');
+  const name = nameEl?.value.trim();
+  if (!name) { showToast('Enter a profile name', 'error'); return; }
+  if (!cfg.shortcuts) cfg.shortcuts = { ...defaultShortcuts };
+  if (!cfg.scPresets) cfg.scPresets = [];
+  cfg.scPresets = cfg.scPresets.filter(p => p.name !== name);
+  cfg.scPresets.push({ name, shortcuts: { ...cfg.shortcuts } });
+  cfg.activeScPreset = name;
+  if (nameEl) nameEl.value = '';
+  fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) })
+    .then(r => r.json()).then(d => { if (d.ok) { cfg = d.config; renderScPresets(cfg.scPresets); showToast(`✓ Profile "${name}" saved`); } });
+}
+
+function applyScPreset(name) {
+  const preset = (cfg.scPresets || []).find(p => p.name === name);
+  if (!preset) return;
+  cfg.shortcuts = { ...preset.shortcuts };
+  cfg.activeScPreset = name;
+  renderShortcutGrid(cfg.shortcuts);
+  renderShortcutSummary(cfg.shortcuts);
+  renderScPresets(cfg.scPresets);
+  fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) })
+    .then(r => r.json()).then(d => { if (d.ok) showToast(`✓ Profile "${name}" applied`); });
+}
+
+function deleteScPreset(name) {
+  if (!confirm(`Delete profile "${name}"?`)) return;
+  cfg.scPresets = (cfg.scPresets || []).filter(p => p.name !== name);
+  if (cfg.activeScPreset === name) cfg.activeScPreset = null;
+  fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) })
+    .then(r => r.json()).then(d => { if (d.ok) { cfg = d.config; renderScPresets(cfg.scPresets); showToast(`Deleted "${name}"`); } });
+}
+
+// ── Scene presets ────────────────────────────────────────────────────────────
+const SCENE_FIELDS = ['vmixHost','vmixPort','inputName','overlayChannel','takeLiveDelay',
+  'vmixEnabled','targetMixes','mixPresets','shortcuts','scPresets','activePreset','activeScPreset'];
+
+function buildScene() {
+  const scene = {};
+  SCENE_FIELDS.forEach(k => { if (cfg[k] !== undefined) scene[k] = cfg[k]; });
+  return scene;
+}
+
+async function saveScene() {
+  const nameEl = document.getElementById('scene-name-input');
+  const name = nameEl?.value.trim();
+  if (!name) { showToast('Enter a scene name', 'error'); return; }
+  const scenes = loadLocalScenes();
+  scenes[name] = { ...buildScene(), savedAt: new Date().toLocaleString() };
+  localStorage.setItem('vmixScenes', JSON.stringify(scenes));
+  if (nameEl) nameEl.value = '';
+  renderSceneList();
+  showToast('✓ Scene "' + name + '" saved');
+}
+
+function loadLocalScenes() {
+  try { return JSON.parse(localStorage.getItem('vmixScenes') || '{}'); } catch(e) { return {}; }
+}
+
+function renderSceneList() {
+  const el = document.getElementById('scene-list');
+  if (!el) return;
+  const scenes = loadLocalScenes();
+  const keys = Object.keys(scenes);
+  if (!keys.length) { el.innerHTML = '<div style="font-size:11px;color:var(--text3)">No scenes saved yet</div>'; return; }
+  el.innerHTML = keys.map(name => {
+    const s = scenes[name];
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${name}</div>
+        <div style="font-size:10px;color:var(--text3)">${s.savedAt || ''}</div>
+      </div>
+      <button onclick="applyScene('${name.replace(/'/g,"\'")}') " style="background:var(--purple-dim);color:var(--purple2);border:1px solid #3a3280;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">Apply</button>
+      <button onclick="deleteScene('${name.replace(/'/g,"\'")}') " style="background:var(--red-dim);color:var(--red);border:1px solid #5c2020;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function applyScene(name) {
+  const scenes = loadLocalScenes();
+  const scene = scenes[name];
+  if (!scene) return;
+  // Merge scene into current cfg and save to server
+  const merged = { ...cfg, ...scene };
+  const res = await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(merged) });
+  const data = await res.json();
+  if (data.ok) { cfg = data.config; applyConfig(cfg); showToast('✓ Scene "' + name + '" applied'); }
+  else showToast('Failed to apply scene', 'error');
+}
+
+function deleteScene(name) {
+  if (!confirm('Delete scene "' + name + '"?')) return;
+  const scenes = loadLocalScenes();
+  delete scenes[name];
+  localStorage.setItem('vmixScenes', JSON.stringify(scenes));
+  renderSceneList();
+  showToast('Deleted "' + name + '"');
+}
+
+function exportConfig() {
+  const data = { ...cfg, exportedAt: new Date().toISOString(), scenes: loadLocalScenes() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'vmix-config-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ Config exported');
+}
+
+async function importConfig(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const result = document.getElementById('import-result');
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    // Restore scenes to localStorage if present
+    if (data.scenes) { localStorage.setItem('vmixScenes', JSON.stringify(data.scenes)); renderSceneList(); }
+    // Push config to server
+    delete data.scenes; delete data.exportedAt;
+    const res = await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    const resp = await res.json();
+    if (resp.ok) {
+      cfg = resp.config; applyConfig(cfg);
+      if (result) { result.textContent = '✓ Config imported successfully'; result.style.color = 'var(--teal)'; }
+      showToast('✓ Config imported');
+      setTimeout(() => { if (result) result.textContent = ''; }, 3000);
+    }
+  } catch(e) {
+    if (result) { result.textContent = '✗ Invalid file: ' + e.message; result.style.color = 'var(--red)'; }
+    showToast('Import failed', 'error');
+  }
+  event.target.value = '';
+}
+
+// ── Reset to factory defaults ────────────────────────────────────────────────
+async function resetToDefaults() {
+  if (!confirm('Reset ALL settings to factory defaults?\n\nThis clears: VMix connection, mix routing, shortcuts, profiles, presets and scenes.\n\nExport your config first if you want a backup.')) return;
+
+  const defaults = {
+    vmixHost: '127.0.0.1',
+    vmixPort: 8088,
+    inputName: 'Lower Third',
+    takeLiveDelay: 500,
+    overlayChannel: 1,
+    vmixEnabled: true,
+    shortcutsEnabled: true,
+    targetMixes: [0],
+    mixPresets: [],
+    activePreset: null,
+    shortcuts: {
+      sendDataOnly:  'D',
+      sendAndGoLive: 'G',
+      clearAndHide:  'C',
+      nextName:      'ArrowRight',
+      prevName:      'ArrowLeft',
+      overlayIn:     'I',
+      overlayOut:    'O',
+      takePreview:   'Enter'
+    },
+    scPresets: [],
+    activeScPreset: null
+  };
+
+  // Clear local scenes
+  localStorage.removeItem('vmixScenes');
+
+  // Push defaults to server
+  const res = await fetch('/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(defaults)
+  });
+  const data = await res.json();
+  if (data.ok) {
+    cfg = data.config;
+    applyConfig(cfg);
+    renderSceneList();
+    showToast('✓ Reset to factory defaults');
+  } else {
+    showToast('Reset failed', 'error');
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+renderSettingsUrls();
+initOperatorName();   // async - loads operators from server
+connectWS();
+</script>
+<div id="toast"></div>
+</body>
+</html>
